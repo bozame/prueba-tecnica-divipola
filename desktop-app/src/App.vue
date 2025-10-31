@@ -205,9 +205,9 @@
   const municipioSeleccionado = ref<string>("");
   const nuevoMunicipio = ref("");
   const corregimiento = ref("");
-  const sincronizando = ref(false);
   const syncStatusText = ref("Sincronización pendiente");
   const syncStatusClass = ref("");
+  const sincronizando = ref(false);
 
   watch(departamentoSeleccionado, () => {
     cargarMunicipiosPorDepartamento()
@@ -590,30 +590,39 @@
   function selectRow(row: Registro) {
     filaSeleccionada.value = row;
   }
+
+
   async function verificarConexionYSincronizar() {
     if (sincronizando.value) return;
     sincronizando.value = true;
+
     try {
+      syncStatusText.value = "Sincronizando...";
+      syncStatusClass.value = "syncing";
+
       const res = await fetch("https://prueba-tecnica-divipola-production.up.railway.app/ping");
       if (!res.ok) throw new Error("Servidor no disponible");
 
-      
       console.log("Conexión activa, empezando sincronización");
       await sincronizarDesdeNube();
+
       console.log("Sincronización completada");
+      syncStatusText.value = "Sincronizado ✅";
+      syncStatusClass.value = "synced";
     } catch (err) {
       console.warn("No se pudo sincronizar:", err);
-      syncStatusText.value = "No hay conexión a internet, no se pudo sincronizar";
+      syncStatusText.value = "Error o sin conexión ❌";
       syncStatusClass.value = "error";
     } finally {
       sincronizando.value = false;
     }
   }
 
+
   onMounted(() => {
     cargarDepartamentos();
     cargarRegistros();
-    setInterval(verificarConexionYSincronizar, 40000); // 60 segundos
+    setInterval(verificarConexionYSincronizar, 20000); // 20 segundos
   });
 </script>
 
