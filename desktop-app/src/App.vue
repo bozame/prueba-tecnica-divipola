@@ -109,7 +109,7 @@
               <td>{{ registro.departamento }}</td>
               <td>{{ registro.municipio }}</td>
               <td>{{ registro.corregimiento }}</td>
-              <td>{{ registro.sincronizar === 1 ? '✅' : '❌' }}</td>
+              <td>{{ registro.estado === 1 ? '✅' : '❌' }}</td>
             </tr>
           </tbody>
         </table>
@@ -146,7 +146,7 @@
               <td>{{ registro.departamento }}</td>
               <td>{{ registro.municipio }}</td>
               <td>{{ registro.corregimiento }}</td>
-              <td>{{ registro.sincronizar === 1 ? '✅' : '❌' }}</td>
+              <td>{{ registro.estado === 1 ? '✅' : '❌' }}</td>
             </tr>
           </tbody>
         </table>
@@ -188,7 +188,7 @@
     departamento: string;
     municipio: string;
     corregimiento: string;
-    sincronizar: number; // estado de sincronización
+    estado: number; // estado de sincronización
   }
 
   const registros = ref<Registro[]>([]);
@@ -233,14 +233,14 @@
         nom_departamento AS departamento, 
         nom_municipio AS municipio, 
         nom_corregimiento AS corregimiento,
-        estado AS sincronizar
+        estado
       FROM divipola
       WHERE estado != 1
     `);
 
     for (const reg of pendientes) {
       try {
-        if (reg.sincronizar === 3) { //////////// POST
+        if (reg.estado === 3) { //////////// POST
           const res = await fetch("https://prueba-tecnica-divipola-production.up.railway.app/divipola", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -257,11 +257,16 @@
           const serverResp = await res.json().catch(() => ({}));
           console.log("Respuesta POST:", serverResp);
 
+          if (!res.ok) {
+            const text = await res.text();
+            console.error("❌ Error en POST:", res.status, text);
+          }
+
           if (res.ok) {
             await db.execute(`UPDATE divipola SET estado = 1 WHERE cod_departamento = ? AND cod_municipio = ?`, [reg.cod_departamento, reg.cod_municipio]);
             console.log(`Enviado a la nube: ${reg.municipio}`);
           }
-        } else if (reg.sincronizar === 2) { /////////// PUT
+        } else if (reg.estado === 2) { /////////// PUT
           const res = await fetch(`https://prueba-tecnica-divipola-production.up.railway.app/divipola/${reg.cod_departamento}/${reg.cod_municipio}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -275,10 +280,16 @@
           const serverResp = await res.json().catch(() => ({}));
           console.log("Respuesta PUT: ", serverResp);
 
+          if (!res.ok) {
+            const text = await res.text();
+            console.error("❌ Error en POST:", res.status, text);
+          }
+
+
           if (res.ok) {
             await db.execute(`UPDATE divipola SET estado = 1 WHERE cod_departamento = ? AND cod_municipio = ?`, [reg.cod_departamento, reg.cod_municipio]);
           }
-        } else if (reg.sincronizar === 0) {///////////////// DELETE
+        } else if (reg.estado === 0) {///////////////// DELETE
           const res = await fetch(`https://prueba-tecnica-divipola-production.up.railway.app/divipola/${reg.cod_departamento}/${reg.cod_municipio}`, { method: "DELETE" });
           if (res.ok) {
             await db.execute(`DELETE FROM divipola WHERE cod_departamento = ? AND cod_municipio = ?`, [reg.cod_departamento, reg.cod_municipio]);
@@ -302,6 +313,11 @@
           lugar.nom_corregimiento,
         ]);
       }
+
+          if (!res.ok) {
+            const text = await res.text();
+            console.error("❌ Error en POST:", res.status, text);
+          }
       await cargarRegistros();
       console.log("Sincronización completada");
     } catch (err) {
@@ -321,7 +337,7 @@
           nom_departamento AS departamento, 
           nom_municipio AS municipio, 
           nom_corregimiento AS corregimiento, 
-          estado AS sincronizar 
+          estado
         FROM divipola
         WHERE estado IN (1, 2, 3)`
       );
@@ -329,7 +345,7 @@
       registros.value = result;
 
       // pestaña de recientes
-      recientes.value = result.filter((r) => r.sincronizar === 2 || r.sincronizar === 3);
+      recientes.value = result.filter((r) => r.estado === 2 || r.estado === 3);
     } catch (err) {
       console.error(err);
       error.value = "Error al cargar registros desde la db local";
@@ -445,8 +461,23 @@
       const nomDepartamento = departamentoSeleccionado.value.nom_departamento;
       const codPais = departamentoSeleccionado.value.cod_pais || "CO";
 
-      const codMunicipio = await generarCodigoMunicipio(codDepartamento, municipioFinal);
+      // verificar duplicado nates de que guarde
+      const verificar = await getDB();
 
+      const existeDuplicado = await verificar.select(
+        `SELECT 1 FROM divipola
+         WHERE cod_departamento = ?
+           AND UPPER(TRIM(nom_municipio)) = UPPER(?)
+           AND (nom_corregimiento IS NULL OR TRIM(nom_corregimiento) = ?)
+         LIMIT 1`,
+        [codDepartamento, municipioFinal, corregimientoFinal]
+      );
+
+      if (existeDuplicado.length > 0) {
+        alert("Ya existe un municipio con ese nombre y corregimiento en este departamento");
+        return;
+      }
+      const codMunicipio = await generarCodigoMunicipio(codDepartamento, municipioFinal);
       const nuevoCodigo = await generarCodigoMunicipio(codDepartamento, municipioFinal);
       const db = await getDB();
       await db.execute(
@@ -547,7 +578,7 @@
   function openEdit() {
     if (filaSeleccionada.value) {
       Object.assign(editable, { ...filaSeleccionada.value });
-      delete editable.sincronizar;
+      delete editable.estado;
       mostrarEditar.value = true;
     }
   }
