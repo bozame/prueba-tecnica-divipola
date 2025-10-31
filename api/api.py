@@ -95,6 +95,13 @@ def borrar_lugar(cod_departamento, cod_municipio):
     con.close()
     return f"Lugar con departamento {cod_departamento} y municipio {cod_municipio} eliminado exitosamente"
 
+# este get es para verificar la conexión
+# funciona como un disparador para leugo llamar la función de sincronizar
+@app.route("/ping", methods=["GET"])
+def ping():
+    return "ok", 200
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT"))
     app.run(host="0.0.0.0", port=port)
